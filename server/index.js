@@ -18,6 +18,10 @@ const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SEC
 const app = express()
 const PORT = process.env.PORT || 3001
 
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`PortfolioAI API server running on port ${PORT}`)
+})
+
 // Middleware
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
@@ -1139,6 +1143,3 @@ app.delete('/custom-domains/:id', async (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
-  console.log(`PortfolioAI API server running on port ${PORT}`)
-})
