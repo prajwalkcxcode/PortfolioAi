@@ -5,11 +5,12 @@ interface AgencyTemplateProps {
   personalInfo: PersonalInfo
   skills: Skill[]
   projects: Project[]
+  customStyles?: any
 }
 
-export default function AgencyTemplate({ personalInfo, skills, projects }: AgencyTemplateProps) {
+export default function AgencyTemplate({ personalInfo, skills, projects, customStyles }: AgencyTemplateProps) {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white" style={{ fontFamily: customStyles?.font || 'Inter, sans-serif' }}>
       <div className="container mx-auto px-4 py-16 max-w-7xl">
         {/* Header */}
         <header className="mb-20">

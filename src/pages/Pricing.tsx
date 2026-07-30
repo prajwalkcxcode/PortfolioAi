@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Check, X, ArrowRight, Loader2 } from 'lucide-react'
+import { Check, X, ArrowLeft, Loader2 } from 'lucide-react'
 
 interface PricingPlan {
   id: string
@@ -20,34 +20,34 @@ export default function Pricing() {
   const plans: PricingPlan[] = [
     {
       id: 'free',
-      name: 'Free',
+      name: 'Free Starter',
       price: 0,
       interval: 'month',
-      description: 'Perfect for getting started',
+      description: 'Ideal for students and personal portfolios',
       features: [
-        '1 portfolio',
-        '50 AI credits/month',
-        'Basic templates',
+        '1 Active Portfolio site',
+        '50 AI Credits / month',
+        'Basic developer and student templates',
         'portfolioai.com subdomain',
-        'Community support',
+        'Community discussion support',
       ],
       stripePriceId: import.meta.env.VITE_STRIPE_FREE_PRICE_ID || '',
     },
     {
       id: 'pro',
-      name: 'Pro',
+      name: 'Pro Professional',
       price: 29,
       interval: 'month',
-      description: 'For professionals and businesses',
+      description: 'Designed for active freelancers and developers',
       popular: true,
       features: [
-        'Unlimited portfolios',
-        '500 AI credits/month',
-        'Premium templates',
-        'Custom domains',
-        'Priority support',
-        'Advanced analytics',
-        'Remove PortfolioAI branding',
+        'Unlimited portfolios & hosting',
+        '500 AI credits / month',
+        'All Premium layouts (Vercel & Framer style)',
+        'Custom domain support (SSL included)',
+        'Advanced performance analytics',
+        'Priority email support',
+        'Complete removal of PortfolioAI branding',
       ],
       stripePriceId: import.meta.env.VITE_STRIPE_PRO_PRICE_ID || '',
     },
@@ -74,7 +74,6 @@ export default function Pricing() {
       const result = await response.json()
       if (result.error) throw new Error(result.error)
 
-      // Redirect to Stripe Checkout
       window.location.href = result.data.url
     } catch (error: any) {
       console.error('Subscription error:', error)
@@ -86,130 +85,128 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-16">
+      <div className="max-w-5xl mx-auto px-6 py-16 md:py-24">
         {/* Header */}
-        <div className="text-center mb-16">
-          <h1 className="text-5xl font-bold mb-4">Simple, Transparent Pricing</h1>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Choose the perfect plan for your needs. Upgrade or downgrade at any time.
+        <div className="text-center max-w-2xl mx-auto mb-16">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-4">Simple, transparent plans</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Choose the right subscription for your career stage. Upgrade or downgrade instantly.
           </p>
         </div>
 
         {/* Pricing Cards */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+        <div className="grid md:grid-cols-2 gap-8 max-w-3xl mx-auto mb-20">
           {plans.map((plan) => (
             <div
               key={plan.id}
-              className={`relative rounded-2xl border-2 p-8 ${
+              className={`relative rounded-xl border p-6 flex flex-col justify-between ${
                 plan.popular
-                  ? 'border-primary bg-primary/5 shadow-2xl'
-                  : 'border-border bg-card'
+                  ? 'border-neutral-400 dark:border-neutral-700 bg-card shadow-sm'
+                  : 'border-neutral-200 dark:border-neutral-800 bg-card'
               }`}
             >
               {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="bg-primary text-primary-foreground px-4 py-1 rounded-full text-sm font-semibold">
-                    Most Popular
-                  </span>
+                <div className="absolute -top-3.5 left-6 bg-primary text-primary-foreground text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  RECOMMENDED
                 </div>
               )}
 
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold mb-2">{plan.name}</h2>
-                <p className="text-muted-foreground mb-4">{plan.description}</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-5xl font-bold">${plan.price}</span>
-                  <span className="text-muted-foreground">/{plan.interval}</span>
+              <div>
+                <div className="mb-6">
+                  <h2 className="text-base font-bold mb-1 flex items-center gap-1.5">
+                    {plan.name}
+                  </h2>
+                  <p className="text-xs text-muted-foreground mb-4 leading-relaxed">{plan.description}</p>
+                  <div className="flex items-baseline gap-1 mt-4">
+                    <span className="text-3xl font-extrabold">${plan.price}</span>
+                    <span className="text-xs text-muted-foreground">/{plan.interval}</span>
+                  </div>
                 </div>
-              </div>
 
-              <ul className="space-y-4 mb-8">
-                {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-3">
-                    <Check className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                    <span className="text-sm">{feature}</span>
-                  </li>
-                ))}
-              </ul>
+                <ul className="space-y-3.5 mb-8 border-t pt-6">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2.5">
+                      <Check className="h-4 w-4 text-neutral-600 dark:text-neutral-400 flex-shrink-0 mt-0.5" />
+                      <span className="text-xs text-foreground/90">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
               <button
                 onClick={() => handleSubscribe(plan.stripePriceId, plan.id)}
                 disabled={loading === plan.id || plan.price === 0}
-                className={`w-full py-3 rounded-lg font-semibold transition-colors ${
+                className={`w-full py-2.5 rounded-lg text-xs font-semibold transition-opacity ${
                   plan.popular
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                    : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    ? 'bg-primary text-primary-foreground hover:opacity-95'
+                    : 'bg-secondary text-secondary-foreground hover:opacity-90'
+                } disabled:opacity-50`}
               >
                 {loading === plan.id ? (
                   <>
-                    <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin inline-block mr-2" />
                     Processing...
                   </>
                 ) : plan.price === 0 ? (
                   'Current Plan'
                 ) : (
-                  <>
-                    Get Started
-                    <ArrowRight className="h-5 w-5 inline ml-2" />
-                  </>
+                  'Upgrade to Pro'
                 )}
               </button>
             </div>
           ))}
         </div>
 
-        {/* Features Comparison */}
-        <div className="mt-20 max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">Feature Comparison</h2>
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted">
-                <tr>
-                  <th className="p-4 text-left font-semibold">Feature</th>
-                  <th className="p-4 text-center font-semibold">Free</th>
-                  <th className="p-4 text-center font-semibold">Pro</th>
+        {/* Feature Comparison */}
+        <div className="max-w-3xl mx-auto mb-20">
+          <h2 className="text-lg font-bold mb-6 text-center">Feature Breakdown</h2>
+          <div className="border rounded-xl overflow-hidden bg-card text-xs">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-neutral-50/50 dark:bg-neutral-900/30 text-left border-b">
+                  <th className="p-4 font-bold text-muted-foreground">Feature</th>
+                  <th className="p-4 text-center font-bold text-muted-foreground w-24">Free</th>
+                  <th className="p-4 text-center font-bold text-muted-foreground w-24">Pro</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr className="border-t">
-                  <td className="p-4">Portfolios</td>
-                  <td className="p-4 text-center">1</td>
-                  <td className="p-4 text-center">Unlimited</td>
+              <tbody className="divide-y">
+                <tr>
+                  <td className="p-4 font-medium">Hosting & Portfolios</td>
+                  <td className="p-4 text-center text-muted-foreground">1</td>
+                  <td className="p-4 text-center text-foreground font-semibold">Unlimited</td>
                 </tr>
-                <tr className="border-t bg-muted/50">
-                  <td className="p-4">AI Credits/month</td>
-                  <td className="p-4 text-center">50</td>
-                  <td className="p-4 text-center">500</td>
+                <tr>
+                  <td className="p-4 font-medium">AI Suggestions Credits</td>
+                  <td className="p-4 text-center text-muted-foreground">50 / mo</td>
+                  <td className="p-4 text-center text-foreground font-semibold">500 / mo</td>
                 </tr>
-                <tr className="border-t">
-                  <td className="p-4">Templates</td>
-                  <td className="p-4 text-center">Basic</td>
-                  <td className="p-4 text-center">Premium</td>
+                <tr>
+                  <td className="p-4 font-medium">Templates Level</td>
+                  <td className="p-4 text-center text-muted-foreground">Basic</td>
+                  <td className="p-4 text-center text-foreground font-semibold">All templates</td>
                 </tr>
-                <tr className="border-t bg-muted/50">
-                  <td className="p-4">Custom Domains</td>
+                <tr>
+                  <td className="p-4 font-medium">Custom Domains</td>
                   <td className="p-4 text-center">
-                    <X className="h-5 w-5 text-destructive mx-auto" />
+                    <X className="h-4 w-4 text-neutral-300 mx-auto" />
                   </td>
                   <td className="p-4 text-center">
-                    <Check className="h-5 w-5 text-primary mx-auto" />
+                    <Check className="h-4 w-4 text-foreground mx-auto" />
                   </td>
                 </tr>
-                <tr className="border-t">
-                  <td className="p-4">Analytics</td>
-                  <td className="p-4 text-center">Basic</td>
-                  <td className="p-4 text-center">Advanced</td>
+                <tr>
+                  <td className="p-4 font-medium">Analytics reports</td>
+                  <td className="p-4 text-center text-muted-foreground">Basic</td>
+                  <td className="p-4 text-center text-foreground font-semibold">Advanced</td>
                 </tr>
-                <tr className="border-t bg-muted/50">
-                  <td className="p-4">Support</td>
-                  <td className="p-4 text-center">Community</td>
-                  <td className="p-4 text-center">Priority</td>
-                </tr>
-                <tr className="border-t">
-                  <td className="p-4">Branding</td>
-                  <td className="p-4 text-center">PortfolioAI</td>
-                  <td className="p-4 text-center">Custom</td>
+                <tr>
+                  <td className="p-4 font-medium">Collaboration Teams</td>
+                  <td className="p-4 text-center">
+                    <X className="h-4 w-4 text-neutral-300 mx-auto" />
+                  </td>
+                  <td className="p-4 text-center">
+                    <Check className="h-4 w-4 text-foreground mx-auto" />
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -217,38 +214,32 @@ export default function Pricing() {
         </div>
 
         {/* FAQ */}
-        <div className="mt-20 max-w-3xl mx-auto">
-          <h2 className="text-3xl font-bold text-center mb-12">Frequently Asked Questions</h2>
-          <div className="space-y-6">
-            <div className="border rounded-lg p-6">
-              <h3 className="font-semibold mb-2">Can I change plans later?</h3>
-              <p className="text-muted-foreground">
-                Yes, you can upgrade or downgrade your plan at any time. Changes take effect immediately.
+        <div className="max-w-2xl mx-auto border-t pt-16">
+          <h2 className="text-lg font-bold text-center mb-8">Frequently Asked Questions</h2>
+          <div className="space-y-4 text-xs">
+            <div className="border rounded-xl p-5 bg-card">
+              <h3 className="font-bold mb-1.5 text-foreground">Can I change or cancel my plan at any time?</h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Yes. If you choose to cancel, your Pro subscription benefits will remain active until the end of your current monthly billing period.
               </p>
             </div>
-            <div className="border rounded-lg p-6">
-              <h3 className="font-semibold mb-2">What happens to my data if I cancel?</h3>
-              <p className="text-muted-foreground">
-                Your data remains accessible until the end of your billing period. You can export your portfolios at any time.
-              </p>
-            </div>
-            <div className="border rounded-lg p-6">
-              <h3 className="font-semibold mb-2">Do AI credits roll over?</h3>
-              <p className="text-muted-foreground">
-                AI credits reset each billing period. Unused credits do not roll over to the next month.
+            <div className="border rounded-xl p-5 bg-card">
+              <h3 className="font-bold mb-1.5 text-foreground">Do my remaining AI credits roll over?</h3>
+              <p className="text-muted-foreground leading-relaxed">
+                No. Credits reset back to your plan's monthly allocation at the beginning of each billing cycle.
               </p>
             </div>
           </div>
         </div>
 
-        {/* CTA */}
-        <div className="mt-20 text-center">
+        {/* Back Link */}
+        <div className="mt-16 text-center select-none">
           <Link
-            to="/"
-            className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            to="/dashboard"
+            className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ArrowRight className="h-4 w-4 rotate-180" />
-            Back to Home
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Dashboard
           </Link>
         </div>
       </div>

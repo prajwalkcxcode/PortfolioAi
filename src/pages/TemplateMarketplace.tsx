@@ -39,7 +39,7 @@ export default function TemplateMarketplace() {
     }
   }
 
-  const handlePurchase = async (templateId: string, price: number) => {
+  const handlePurchase = async (templateId: string) => {
     setPurchasing(templateId)
     try {
       const token = localStorage.getItem('sb-access-token')
@@ -145,7 +145,7 @@ export default function TemplateMarketplace() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => handlePurchase(template.id, template.price)}
+                    onClick={() => handlePurchase(template.id)}
                     disabled={purchasing === template.id}
                     className="w-full py-3 rounded-lg font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >

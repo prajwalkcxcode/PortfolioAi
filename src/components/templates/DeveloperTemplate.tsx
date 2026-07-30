@@ -1,152 +1,167 @@
 import { PersonalInfo, Skill, Project } from '../../types/portfolio'
-import { Github, Linkedin, Mail, MapPin, ExternalLink, Code2 } from 'lucide-react'
+import { Github, Linkedin, Mail, MapPin, Code2, BookOpen, Star, GitFork } from 'lucide-react'
 
 interface DeveloperTemplateProps {
   personalInfo: PersonalInfo
   skills: Skill[]
   projects: Project[]
+  customStyles?: any
 }
 
-export default function DeveloperTemplate({ personalInfo, skills, projects }: DeveloperTemplateProps) {
+export default function DeveloperTemplate({ personalInfo, skills, projects, customStyles }: DeveloperTemplateProps) {
+  const fontClass = customStyles?.font || 'Inter, sans-serif'
+
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      <div className="container mx-auto px-4 py-12 max-w-5xl">
-        {/* Header */}
-        <header className="mb-16">
-          <div className="flex items-center gap-6 mb-6">
-            {personalInfo.avatar && (
-              <img
-                src={personalInfo.avatar}
-                alt={personalInfo.fullName}
-                className="w-24 h-24 rounded-full border-4 border-cyan-500"
-              />
-            )}
-            <div>
-              <h1 className="text-4xl font-bold mb-2">{personalInfo.fullName}</h1>
-              <p className="text-xl text-cyan-400">{personalInfo.title}</p>
-              <div className="flex items-center gap-4 mt-2 text-slate-400">
-                {personalInfo.location && (
-                  <span className="flex items-center gap-1">
-                    <MapPin className="h-4 w-4" />
-                    {personalInfo.location}
-                  </span>
-                )}
-                {personalInfo.email && (
-                  <span className="flex items-center gap-1">
-                    <Mail className="h-4 w-4" />
-                    {personalInfo.email}
-                  </span>
-                )}
+    <div 
+      className="min-h-screen bg-[#0d1117] text-[#c9d1d9] border border-[#30363d] rounded-2xl overflow-hidden font-sans p-6 md:p-12 select-text"
+      style={{ fontFamily: fontClass }}
+    >
+      <div className="max-w-6xl mx-auto flex flex-col md:flex-row gap-8">
+        
+        {/* Left Column: Avatar & Profile */}
+        <aside className="w-full md:w-1/4 flex flex-col items-center md:items-start text-center md:text-left select-none">
+          {personalInfo.avatar && (
+            <img
+              src={personalInfo.avatar}
+              alt={personalInfo.fullName}
+              className="w-48 h-48 rounded-full border border-[#30363d] object-cover mb-4 bg-neutral-900 shadow-sm"
+            />
+          )}
+          <h1 className="text-xl font-bold text-[#f0f6fc] tracking-tight">{personalInfo.fullName}</h1>
+          <p className="text-sm text-[#8b949e] font-light mt-0.5">{personalInfo.title}</p>
+          
+          <p className="text-xs text-[#8b949e] mt-4 leading-relaxed max-w-sm md:max-w-none">
+            {personalInfo.bio}
+          </p>
+
+          <div className="w-full border-t border-[#21262d] mt-6 pt-6 space-y-2.5 text-xs text-[#8b949e]">
+            {personalInfo.location && (
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-[#8b949e] shrink-0" />
+                <span>{personalInfo.location}</span>
               </div>
-            </div>
-          </div>
-          <p className="text-lg text-slate-300 leading-relaxed">{personalInfo.bio}</p>
-          <div className="flex gap-4 mt-6">
+            )}
+            {personalInfo.email && (
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-[#8b949e] shrink-0" />
+                <a href={`mailto:${personalInfo.email}`} className="hover:text-[#58a6ff] transition-colors hover:underline">
+                  {personalInfo.email}
+                </a>
+              </div>
+            )}
             {personalInfo.github && (
-              <a
-                href={personalInfo.github}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
-              >
-                <Github className="h-5 w-5" />
-                GitHub
-              </a>
+              <div className="flex items-center gap-2">
+                <Github className="h-4 w-4 text-[#8b949e] shrink-0" />
+                <a href={personalInfo.github} target="_blank" rel="noopener noreferrer" className="hover:text-[#58a6ff] transition-colors hover:underline truncate">
+                  {personalInfo.github.replace('https://github.com/', '')}
+                </a>
+              </div>
             )}
             {personalInfo.linkedin && (
-              <a
-                href={personalInfo.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
-              >
-                <Linkedin className="h-5 w-5" />
-                LinkedIn
-              </a>
+              <div className="flex items-center gap-2">
+                <Linkedin className="h-4 w-4 text-[#8b949e] shrink-0" />
+                <a href={personalInfo.linkedin} target="_blank" rel="noopener noreferrer" className="hover:text-[#58a6ff] transition-colors hover:underline truncate">
+                  LinkedIn Profile
+                </a>
+              </div>
             )}
           </div>
-        </header>
+        </aside>
 
-        {/* Skills */}
-        <section className="mb-16">
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <Code2 className="h-6 w-6 text-cyan-400" />
-            Skills
-          </h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            {skills.map((skill) => (
-              <div key={skill.id} className="bg-slate-800 p-4 rounded-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-semibold">{skill.name}</span>
-                  <span className="text-sm text-slate-400">{skill.level}</span>
-                </div>
-                <div className="w-full bg-slate-700 rounded-full h-2">
-                  <div
-                    className="bg-cyan-500 h-2 rounded-full"
-                    style={{
-                      width:
-                        skill.level === 'Expert'
-                          ? '100%'
-                          : skill.level === 'Advanced'
-                          ? '80%'
-                          : skill.level === 'Intermediate'
-                          ? '60%'
-                          : '40%',
-                    }}
-                  />
-                </div>
-                <p className="text-sm text-slate-400 mt-2">{skill.category}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* Right Column: Skills & Pinned Repos (Projects) */}
+        <main className="w-full md:w-3/4 space-y-10">
+          {/* Pinned Repositories Grid */}
+          <section>
+            <h2 className="text-sm font-semibold text-[#f0f6fc] border-b border-[#21262d] pb-2 mb-4 flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-[#8b949e]" />
+              Pinned Projects
+            </h2>
 
-        {/* Projects */}
-        <section>
-          <h2 className="text-2xl font-bold mb-6">Projects</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            {projects.map((project) => (
-              <div key={project.id} className="bg-slate-800 p-6 rounded-lg hover:bg-slate-750 transition-colors">
-                <h3 className="text-xl font-semibold mb-2">{project.title}</h3>
-                <p className="text-slate-300 mb-4">{project.description}</p>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {project.technologies.map((tech) => (
-                    <span
-                      key={tech}
-                      className="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded text-sm"
-                    >
-                      {tech}
-                    </span>
-                  ))}
+            <div className="grid sm:grid-cols-2 gap-4">
+              {projects.map((project) => (
+                <div 
+                  key={project.id} 
+                  className="bg-[#161b22] border border-[#30363d] p-5 rounded-lg flex flex-col justify-between hover:border-[#8b949e] transition-colors"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-4 mb-2">
+                      <h3 className="font-semibold text-sm text-[#58a6ff] hover:underline cursor-pointer">
+                        {project.title}
+                      </h3>
+                      <span className="text-[9px] bg-[#111] border border-[#21262d] text-[#8b949e] font-semibold px-2 py-0.5 rounded-full uppercase">
+                        Public
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#8b949e] leading-relaxed mb-4 line-clamp-3">
+                      {project.description}
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Technologies list as colors */}
+                    <div className="flex flex-wrap gap-2">
+                      {project.technologies.map((tech) => (
+                        <span 
+                          key={tech} 
+                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-[#0d1117] border border-[#30363d]"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-[#8b949e] border-t border-[#21262d] pt-3 mt-auto select-none">
+                      <div className="flex gap-4">
+                        <span className="flex items-center gap-1">
+                          <Star className="h-3 w-3" />
+                          12
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <GitFork className="h-3 w-3" />
+                          4
+                        </span>
+                      </div>
+                      <div className="flex gap-3">
+                        {project.githubUrl && (
+                          <a href={project.githubUrl} target="_blank" rel="noopener noreferrer" className="hover:text-[#58a6ff] flex items-center gap-1 transition-colors">
+                            Code
+                          </a>
+                        )}
+                        {project.liveUrl && (
+                          <a href={project.liveUrl} target="_blank" rel="noopener noreferrer" className="hover:text-[#58a6ff] flex items-center gap-1 transition-colors">
+                            Demo
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex gap-3">
-                  {project.githubUrl && (
-                    <a
-                      href={project.githubUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white transition-colors"
-                    >
-                      <Github className="h-4 w-4" />
-                      Code
-                    </a>
-                  )}
-                  {project.liveUrl && (
-                    <a
-                      href={project.liveUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-slate-400 hover:text-white transition-colors"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Live Demo
-                    </a>
-                  )}
+              ))}
+            </div>
+          </section>
+
+          {/* Languages & Skills */}
+          <section>
+            <h2 className="text-sm font-semibold text-[#f0f6fc] border-b border-[#21262d] pb-2 mb-4 flex items-center gap-2">
+              <Code2 className="h-4 w-4 text-[#8b949e]" />
+              Languages & Technologies
+            </h2>
+
+            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {skills.map((skill) => (
+                <div key={skill.id} className="bg-[#161b22] border border-[#30363d] p-4 rounded-lg flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-semibold text-[#f0f6fc]">{skill.name}</div>
+                    <div className="text-[10px] text-[#8b949e] font-medium mt-1 uppercase tracking-wider">{skill.category}</div>
+                  </div>
+                  <span className="text-[9px] font-bold text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded">
+                    {skill.level}
+                  </span>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        </main>
       </div>
     </div>
   )

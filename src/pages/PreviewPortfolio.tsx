@@ -98,26 +98,27 @@ export default function PreviewPortfolio() {
   const renderTemplate = () => {
     const template = portfolio?.template || 'modern'
     const personalInfo = portfolio?.personal_info || {}
+    const customStyles = portfolio?.custom_styles || {}
 
     switch (template) {
       case 'modern':
-        return <ModernTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <ModernTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       case 'minimal':
-        return <MinimalTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <MinimalTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       case 'creative':
-        return <CreativeTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <CreativeTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       case 'developer':
-        return <DeveloperTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <DeveloperTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       case 'designer':
-        return <DesignerTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <DesignerTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       case 'student':
-        return <StudentTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <StudentTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       case 'freelancer':
-        return <FreelancerTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <FreelancerTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       case 'agency':
-        return <AgencyTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <AgencyTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
       default:
-        return <ModernTemplate personalInfo={personalInfo} skills={skills} projects={projects} />
+        return <ModernTemplate personalInfo={personalInfo} skills={skills} projects={projects} customStyles={customStyles} />
     }
   }
 

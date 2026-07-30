@@ -3,12 +3,17 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import Stripe from 'stripe'
+import { createRequire } from 'module'
+const require = createRequire(import.meta.url)
+const pdfParse = require('pdf-parse')
 import {
   generateHeroSection,
   generateAboutSection,
   improveProject,
   generateResumeSummary,
   getUsageStats,
+  parseResumeText,
+  generateSkillsSuggestions,
 } from './aiService.js'
 
 dotenv.config()
@@ -27,11 +32,55 @@ app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ limit: '10mb', extended: true }))
 
-// Supabase client
+// Rate limiting middleware (in-memory)
+const rateLimitWindowMs = 15 * 60 * 1000 // 15 minutes
+const maxRequestsPerWindow = 150 // limit each IP to 150 requests per window
+const ipRequestCounts = new Map()
+
+function rateLimiter(req, res, next) {
+  const ip = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress
+  const now = Date.now()
+  const requestLog = ipRequestCounts.get(ip) || []
+  
+  // Filter out requests older than the window
+  const activeRequests = requestLog.filter(time => now - time < rateLimitWindowMs)
+  
+  if (activeRequests.length >= maxRequestsPerWindow) {
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' })
+  }
+  
+  activeRequests.push(now)
+  ipRequestCounts.set(ip, activeRequests)
+  next()
+}
+
+app.use('/ai', rateLimiter)
+app.use('/resume', rateLimiter)
+
+// Supabase client (fallback/anonymous global client)
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 )
+
+// Helper to get request-specific Supabase client using client JWT
+function getSupabaseClient(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '')
+  if (token) {
+    return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+      global: {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    })
+  }
+  return supabase
+}
 
 // Health check
 app.get('/health', (req, res) => {
@@ -53,7 +102,7 @@ app.post('/auth/register', async (req, res) => {
 
     if (error) throw error
 
-    // Create user profile in users table
+    // Create user profile in users table (if trigger failed or not run)
     if (data.user) {
       const { error: profileError } = await supabase
         .from('users')
@@ -64,7 +113,9 @@ app.post('/auth/register', async (req, res) => {
           avatar: null
         })
 
-      if (profileError) console.error('Profile creation error:', profileError)
+      if (profileError && profileError.code !== '23505') { // Ignore duplicate keys
+        console.error('Profile creation error:', profileError)
+      }
     }
 
     res.json({ data, error: null })
@@ -93,7 +144,6 @@ app.post('/auth/login', async (req, res) => {
 app.post('/auth/logout', async (req, res) => {
   try {
     const { token } = req.body
-    
     const { error } = await supabase.auth.signOut(token)
 
     if (error) throw error
@@ -107,22 +157,24 @@ app.post('/auth/logout', async (req, res) => {
 app.get('/auth/user', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
     
-    const { data, error } = await supabase.auth.getUser(token)
+    const { data, error } = await supabaseClient.auth.getUser(token)
 
     if (error) throw error
 
-    // Get user profile from users table
     if (data.user) {
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile, error: profileError } = await supabaseClient
         .from('users')
         .select('*')
         .eq('id', data.user.id)
         .single()
 
-      if (profileError) throw profileError
+      if (profileError) {
+        console.error('Failed to get user profile:', profileError)
+      }
 
-      res.json({ user: { ...data.user, profile }, error: null })
+      res.json({ user: { ...data.user, profile: profile || null }, error: null })
     } else {
       res.json({ user: null, error: null })
     }
@@ -135,11 +187,12 @@ app.get('/auth/user', async (req, res) => {
 app.get('/portfolios', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('portfolios')
       .select('*')
       .eq('user_id', user.id)
@@ -156,7 +209,7 @@ app.get('/portfolios', async (req, res) => {
 app.get('/portfolios/:id', async (req, res) => {
   try {
     const { id } = req.params
-
+    // Allow public access for templates rendering
     const { data, error } = await supabase
       .from('portfolios')
       .select('*')
@@ -174,13 +227,14 @@ app.get('/portfolios/:id', async (req, res) => {
 app.post('/portfolios', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { template, theme, bio, personal_info, custom_styles, meta_title, meta_description, og_image } = req.body
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('portfolios')
       .insert({
         user_id: user.id,
@@ -207,14 +261,15 @@ app.post('/portfolios', async (req, res) => {
 app.put('/portfolios/:id', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
     const { template, theme, bio, personal_info, custom_styles, meta_title, meta_description, og_image } = req.body
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('portfolios')
       .update({
         template,
@@ -243,31 +298,30 @@ app.put('/portfolios/:id', async (req, res) => {
 app.post('/portfolios/:id/publish', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
     const { subdomain } = req.body
 
-    // Validate subdomain
     if (!subdomain || !/^[a-z0-9-]{3,30}$/.test(subdomain)) {
       throw new Error('Invalid subdomain. Must be 3-30 characters, lowercase letters, numbers, and hyphens only.')
     }
 
     // Check if subdomain is already taken
-    const { data: existing } = await supabase
+    const { data: existing } = await supabaseClient
       .from('portfolios')
       .select('id')
       .eq('subdomain', subdomain)
       .single()
 
-    if (existing) {
+    if (existing && existing.id !== id) {
       throw new Error('This subdomain is already taken. Please choose another.')
     }
 
-    // Update portfolio with subdomain and publish status
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('portfolios')
       .update({
         subdomain,
@@ -296,13 +350,14 @@ app.post('/portfolios/:id/publish', async (req, res) => {
 app.post('/portfolios/:id/unpublish', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('portfolios')
       .update({
         is_published: false,
@@ -324,13 +379,14 @@ app.post('/portfolios/:id/unpublish', async (req, res) => {
 app.delete('/portfolios/:id', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
       .from('portfolios')
       .delete()
       .eq('id', id)
@@ -348,12 +404,11 @@ app.delete('/portfolios/:id', async (req, res) => {
 app.get('/portfolios/:portfolioId/projects', async (req, res) => {
   try {
     const { portfolioId } = req.params
-
     const { data, error } = await supabase
       .from('projects')
       .select('*')
       .eq('portfolio_id', portfolioId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
 
     if (error) throw error
 
@@ -366,13 +421,14 @@ app.get('/portfolios/:portfolioId/projects', async (req, res) => {
 app.post('/projects', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { portfolio_id, title, description, technologies, github_url, live_url, image_url } = req.body
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('projects')
       .insert({
         portfolio_id,
@@ -397,14 +453,15 @@ app.post('/projects', async (req, res) => {
 app.put('/projects/:id', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
     const { title, description, technologies, github_url, live_url, image_url } = req.body
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('projects')
       .update({
         title,
@@ -430,13 +487,14 @@ app.put('/projects/:id', async (req, res) => {
 app.delete('/projects/:id', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
       .from('projects')
       .delete()
       .eq('id', id)
@@ -453,12 +511,11 @@ app.delete('/projects/:id', async (req, res) => {
 app.get('/portfolios/:portfolioId/skills', async (req, res) => {
   try {
     const { portfolioId } = req.params
-
     const { data, error } = await supabase
       .from('skills')
       .select('*')
       .eq('portfolio_id', portfolioId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: true })
 
     if (error) throw error
 
@@ -471,13 +528,14 @@ app.get('/portfolios/:portfolioId/skills', async (req, res) => {
 app.post('/skills', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { portfolio_id, skill_name, level, category } = req.body
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('skills')
       .insert({
         portfolio_id,
@@ -499,14 +557,15 @@ app.post('/skills', async (req, res) => {
 app.put('/skills/:id', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
     const { skill_name, level, category } = req.body
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('skills')
       .update({
         skill_name,
@@ -529,13 +588,14 @@ app.put('/skills/:id', async (req, res) => {
 app.delete('/skills/:id', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
       .from('skills')
       .delete()
       .eq('id', id)
@@ -551,11 +611,9 @@ app.delete('/skills/:id', async (req, res) => {
 // AI Generation Routes
 app.post('/ai/generate-about', async (req, res) => {
   try {
-    console.log('Headers received:', req.headers)
     const token = req.headers.authorization?.replace('Bearer ', '')
-    console.log('Token extracted:', token ? 'exists' : 'missing')
-    
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
@@ -565,7 +623,7 @@ app.post('/ai/generate-about', async (req, res) => {
       throw new Error('Missing required fields: name, role, skills')
     }
 
-    const result = await generateAboutSection(name, role, skills, experience, user.id)
+    const result = await generateAboutSection(name, role, skills, experience, user.id, supabaseClient)
     res.json({ data: result, error: null })
   } catch (error) {
     console.error('AI generation error:', error)
@@ -576,7 +634,8 @@ app.post('/ai/generate-about', async (req, res) => {
 app.post('/ai/improve-project', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
@@ -586,7 +645,7 @@ app.post('/ai/improve-project', async (req, res) => {
       throw new Error('Missing required fields: projectName, technologies')
     }
 
-    const result = await improveProject(projectName, technologies, user.id)
+    const result = await improveProject(projectName, technologies, user.id, supabaseClient)
     res.json({ data: result, error: null })
   } catch (error) {
     res.status(400).json({ error: error.message })
@@ -596,7 +655,8 @@ app.post('/ai/improve-project', async (req, res) => {
 app.post('/ai/generate-resume-summary', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
@@ -606,7 +666,24 @@ app.post('/ai/generate-resume-summary', async (req, res) => {
       throw new Error('Missing required fields: name, role, skills')
     }
 
-    const result = await generateResumeSummary(name, role, skills, experience, user.id)
+    const result = await generateResumeSummary(name, role, skills, experience, user.id, supabaseClient)
+    res.json({ data: result, error: null })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+app.post('/ai/skills-suggestions', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
+
+    if (!user) throw new Error('Unauthorized')
+
+    const { role, bio } = req.body
+
+    const result = await generateSkillsSuggestions(role, bio, user.id, supabaseClient)
     res.json({ data: result, error: null })
   } catch (error) {
     res.status(400).json({ error: error.message })
@@ -616,12 +693,175 @@ app.post('/ai/generate-resume-summary', async (req, res) => {
 app.get('/ai/usage', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
-    const stats = getUsageStats(user.id)
+    const stats = await getUsageStats(user.id, supabaseClient)
     res.json({ data: stats, error: null })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+// Resume Parsing Route
+app.post('/resume/parse', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
+    if (!user) throw new Error('Unauthorized')
+
+    const { fileData, fileName } = req.body
+    if (!fileData) throw new Error('No resume file data provided')
+
+    const base64Content = fileData.split(';base64,').pop()
+    const buffer = Buffer.from(base64Content, 'base64')
+
+    let text = ''
+    if (fileName?.toLowerCase().endsWith('.pdf')) {
+      const parsedPdf = await pdfParse(buffer)
+      text = parsedPdf.text
+    } else {
+      text = buffer.toString('utf-8')
+    }
+
+    if (!text || text.trim().length === 0) {
+      throw new Error('Failed to extract text from resume')
+    }
+
+    const parsedDetails = await parseResumeText(text, user.id, supabaseClient)
+    res.json({ data: parsedDetails, error: null })
+  } catch (error) {
+    console.error('Resume parse error:', error)
+    res.status(400).json({ error: error.message })
+  }
+})
+
+// Teams Routes
+app.post('/teams', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
+    if (!user) throw new Error('Unauthorized')
+
+    const { name } = req.body
+    if (!name) throw new Error('Team name is required')
+
+    const { data: team, error: teamError } = await supabaseClient
+      .from('teams')
+      .insert({ name, owner_id: user.id })
+      .select()
+      .single()
+
+    if (teamError) throw teamError
+
+    const { error: memberError } = await supabaseClient
+      .from('team_members')
+      .insert({ team_id: team.id, user_id: user.id, role: 'owner' })
+
+    if (memberError) throw memberError
+
+    res.json({ data: team, error: null })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+app.get('/teams', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
+    if (!user) throw new Error('Unauthorized')
+
+    // Retrieve teams owned by user or where they are a member
+    const { data: ownedTeams, error: ownedError } = await supabaseClient
+      .from('teams')
+      .select('*, team_members(*)')
+      .eq('owner_id', user.id)
+
+    if (ownedError) throw ownedError
+
+    const { data: memberTeams, error: memberError } = await supabaseClient
+      .from('team_members')
+      .select('teams(*, team_members(*))')
+      .eq('user_id', user.id)
+      .neq('role', 'owner')
+
+    if (memberError) throw memberError
+
+    const collatedTeams = [
+      ...(ownedTeams || []),
+      ...(memberTeams?.map(mt => mt.teams).filter(Boolean) || [])
+    ]
+
+    // Deduplicate just in case
+    const uniqueTeams = Array.from(new Map(collatedTeams.map(t => [t.id, t])).values())
+
+    res.json({ data: uniqueTeams, error: null })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+app.post('/teams/:id/members', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
+    if (!user) throw new Error('Unauthorized')
+
+    const { id } = req.params
+    const { email, role = 'member' } = req.body
+    if (!email) throw new Error('Member email is required')
+
+    // Verify requesting user is owner or admin of the team
+    const { data: teamCheck } = await supabaseClient
+      .from('teams')
+      .select('owner_id')
+      .eq('id', id)
+      .single()
+
+    const { data: memberCheck } = await supabaseClient
+      .from('team_members')
+      .select('role')
+      .eq('team_id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    const isOwner = teamCheck?.owner_id === user.id
+    const isAdmin = memberCheck?.role === 'admin'
+
+    if (!isOwner && !isAdmin) {
+      throw new Error('Only team owners and admins can invite members.')
+    }
+
+    // Find invitee by email
+    const { data: invitee, error: findError } = await supabaseClient
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single()
+
+    if (findError || !invitee) {
+      throw new Error('User not found. Invitees must sign up on the platform first.')
+    }
+
+    const { data, error } = await supabaseClient
+      .from('team_members')
+      .insert({ team_id: id, user_id: invitee.id, role })
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') throw new Error('User is already a member of this team')
+      throw error
+    }
+
+    res.json({ data, error: null })
   } catch (error) {
     res.status(400).json({ error: error.message })
   }
@@ -630,12 +870,13 @@ app.get('/ai/usage', async (req, res) => {
 // Stripe Subscription Routes
 app.post('/subscriptions/create-checkout-session', async (req, res) => {
   if (!stripe) {
-    return res.status(400).json({ error: 'Stripe not configured' })
+    return res.status(400).json({ error: 'Stripe is not configured on this server.' })
   }
 
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
@@ -643,7 +884,7 @@ app.post('/subscriptions/create-checkout-session', async (req, res) => {
 
     // Get or create Stripe customer
     let customerId
-    const { data: existingSubscription } = await supabase
+    const { data: existingSubscription } = await supabaseClient
       .from('subscriptions')
       .select('stripe_customer_id')
       .eq('user_id', user.id)
@@ -669,8 +910,8 @@ app.post('/subscriptions/create-checkout-session', async (req, res) => {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.FRONTEND_URL}/dashboard?subscription=success`,
-      cancel_url: `${process.env.FRONTEND_URL}/pricing?subscription=canceled`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/dashboard?subscription=success`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/pricing?subscription=canceled`,
     })
 
     res.json({ data: { url: session.url }, error: null })
@@ -681,16 +922,17 @@ app.post('/subscriptions/create-checkout-session', async (req, res) => {
 
 app.post('/subscriptions/cancel', async (req, res) => {
   if (!stripe) {
-    return res.status(400).json({ error: 'Stripe not configured' })
+    return res.status(400).json({ error: 'Stripe is not configured on this server.' })
   }
 
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
-    const { data: subscription } = await supabase
+    const { data: subscription } = await supabaseClient
       .from('subscriptions')
       .select('*')
       .eq('user_id', user.id)
@@ -704,7 +946,7 @@ app.post('/subscriptions/cancel', async (req, res) => {
       cancel_at_period_end: true,
     })
 
-    await supabase
+    await supabaseClient
       .from('subscriptions')
       .update({ cancel_at_period_end: true })
       .eq('user_id', user.id)
@@ -718,11 +960,12 @@ app.post('/subscriptions/cancel', async (req, res) => {
 app.get('/subscriptions/current', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
-    const { data: subscription } = await supabase
+    const { data: subscription } = await supabaseClient
       .from('subscriptions')
       .select('*')
       .eq('user_id', user.id)
@@ -752,21 +995,16 @@ app.post('/webhooks/stripe', async (req, res) => {
 
   switch (event.type) {
     case 'checkout.session.completed':
-      const session = event.data.object
-      // Handle successful checkout
-      await handleCheckoutSessionCompleted(session)
+      await handleCheckoutSessionCompleted(event.data.object)
       break
     case 'customer.subscription.updated':
-      const subscription = event.data.object
-      await handleSubscriptionUpdated(subscription)
+      await handleSubscriptionUpdated(event.data.object)
       break
     case 'customer.subscription.deleted':
-      const deletedSubscription = event.data.object
-      await handleSubscriptionDeleted(deletedSubscription)
+      await handleSubscriptionDeleted(event.data.object)
       break
     case 'checkout.session.async_payment_succeeded':
-      const asyncSession = event.data.object
-      await handleCheckoutSessionCompleted(asyncSession)
+      await handleCheckoutSessionCompleted(event.data.object)
       break
     default:
       console.log(`Unhandled event type ${event.type}`)
@@ -778,28 +1016,23 @@ app.post('/webhooks/stripe', async (req, res) => {
 async function handleCheckoutSessionCompleted(session) {
   const { customer, subscription: stripeSubscriptionId, metadata } = session
   
-  // Check if this is a template purchase (one-time payment)
   if (metadata?.templateId && metadata?.userId) {
     await handleTemplatePurchase(session)
     return
   }
   
-  // Get user from customer metadata
   const customerData = await stripe.customers.retrieve(customer)
   const userId = customerData.metadata.userId
 
-  // Get subscription details
   const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId)
   const priceId = subscription.items.data[0].price.id
 
-  // Get pricing plan
   const { data: pricingPlan } = await supabase
     .from('pricing_plans')
     .select('*')
     .eq('stripe_price_id', priceId)
     .single()
 
-  // Create or update subscription
   await supabase
     .from('subscriptions')
     .upsert({
@@ -813,7 +1046,6 @@ async function handleCheckoutSessionCompleted(session) {
       current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
     })
 
-  // Initialize AI credits
   await supabase
     .from('ai_credits')
     .upsert({
@@ -826,8 +1058,6 @@ async function handleCheckoutSessionCompleted(session) {
 
 async function handleTemplatePurchase(session) {
   const { metadata } = session
-  
-  // Record the template purchase
   await supabase
     .from('template_purchases')
     .insert({
@@ -878,7 +1108,7 @@ app.post('/analytics/track', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0]
 
-    // Upsert analytics record
+    // Upsert analytics record for today
     const { data, error } = await supabase
       .from('portfolio_analytics')
       .upsert({
@@ -890,17 +1120,12 @@ app.post('/analytics/track', async (req, res) => {
 
     if (error) throw error
 
-    // Increment the appropriate counter
-    const updateData = type === 'view' 
-      ? { views: (data?.views || 0) + 1 }
-      : { clicks: (data?.clicks || 0) + 1 }
-
     if (type === 'view') {
       await supabase
         .from('portfolio_analytics')
         .update({ 
           views: (data?.views || 0) + 1,
-          unique_visitors: (data?.unique_visitors || 0) + 1 // Simplified for now
+          unique_visitors: (data?.unique_visitors || 0) + 1
         })
         .eq('portfolio_id', portfolioId)
         .eq('date', today)
@@ -936,7 +1161,6 @@ app.get('/analytics/:portfolioId', async (req, res) => {
 
     if (error) throw error
 
-    // Aggregate data
     const totalViews = data.reduce((sum, record) => sum + (record.views || 0), 0)
     const totalClicks = data.reduce((sum, record) => sum + (record.clicks || 0), 0)
     const totalUniqueVisitors = data.reduce((sum, record) => sum + (record.unique_visitors || 0), 0)
@@ -961,27 +1185,25 @@ app.get('/analytics/:portfolioId', async (req, res) => {
 app.get('/premium-templates', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
-    // Get all premium templates
-    const { data: templates, error } = await supabase
+    const { data: templates, error } = await supabaseClient
       .from('premium_templates')
       .select('*')
       .eq('is_active', true)
 
     if (error) throw error
 
-    // Check which templates the user has purchased
-    const { data: purchases } = await supabase
+    const { data: purchases } = await supabaseClient
       .from('template_purchases')
       .select('template_id')
       .eq('user_id', user.id)
 
     const purchasedTemplateIds = purchases?.map(p => p.template_id) || []
 
-    // Add purchase status to each template
     const templatesWithStatus = templates?.map(template => ({
       ...template,
       is_purchased: purchasedTemplateIds.includes(template.id),
@@ -1001,14 +1223,14 @@ app.post('/premium-templates/purchase', async (req, res) => {
 
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { templateId } = req.body
 
-    // Get template details
-    const { data: template } = await supabase
+    const { data: template } = await supabaseClient
       .from('premium_templates')
       .select('*')
       .eq('id', templateId)
@@ -1016,8 +1238,7 @@ app.post('/premium-templates/purchase', async (req, res) => {
 
     if (!template) throw new Error('Template not found')
 
-    // Check if already purchased
-    const { data: existingPurchase } = await supabase
+    const { data: existingPurchase } = await supabaseClient
       .from('template_purchases')
       .select('*')
       .eq('user_id', user.id)
@@ -1028,7 +1249,6 @@ app.post('/premium-templates/purchase', async (req, res) => {
       throw new Error('You already own this template')
     }
 
-    // Create Stripe checkout session for one-time payment
     const session = await stripe.checkout.sessions.create({
       customer_email: user.email,
       payment_method_types: ['card'],
@@ -1039,8 +1259,8 @@ app.post('/premium-templates/purchase', async (req, res) => {
         },
       ],
       mode: 'payment',
-      success_url: `${process.env.FRONTEND_URL}/marketplace?purchase=success`,
-      cancel_url: `${process.env.FRONTEND_URL}/marketplace?purchase=canceled`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/marketplace?purchase=success`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/marketplace?purchase=canceled`,
       metadata: {
         userId: user.id,
         templateId: templateId,
@@ -1057,19 +1277,18 @@ app.post('/premium-templates/purchase', async (req, res) => {
 app.post('/custom-domains', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { domain, portfolioId } = req.body
 
-    // Validate domain format
     if (!domain || !/^[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*\.[a-zA-Z]{2,}$/.test(domain)) {
       throw new Error('Invalid domain format')
     }
 
-    // Check if domain is already taken
-    const { data: existing } = await supabase
+    const { data: existing } = await supabaseClient
       .from('custom_domains')
       .select('id')
       .eq('domain', domain)
@@ -1079,8 +1298,7 @@ app.post('/custom-domains', async (req, res) => {
       throw new Error('This domain is already in use')
     }
 
-    // Create custom domain record
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('custom_domains')
       .insert({
         user_id: user.id,
@@ -1103,11 +1321,12 @@ app.post('/custom-domains', async (req, res) => {
 app.get('/custom-domains', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('custom_domains')
       .select('*')
       .eq('user_id', user.id)
@@ -1123,13 +1342,14 @@ app.get('/custom-domains', async (req, res) => {
 app.delete('/custom-domains/:id', async (req, res) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '')
-    const { data: { user } } = await supabase.auth.getUser(token)
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
 
     if (!user) throw new Error('Unauthorized')
 
     const { id } = req.params
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
       .from('custom_domains')
       .delete()
       .eq('id', id)
@@ -1143,3 +1363,50 @@ app.delete('/custom-domains/:id', async (req, res) => {
   }
 })
 
+// Bulk Projects Deletion
+app.delete('/portfolios/:portfolioId/projects', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
+
+    if (!user) throw new Error('Unauthorized')
+
+    const { portfolioId } = req.params
+
+    const { error } = await supabaseClient
+      .from('projects')
+      .delete()
+      .eq('portfolio_id', portfolioId)
+
+    if (error) throw error
+
+    res.json({ error: null })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})
+
+// Bulk Skills Deletion
+app.delete('/portfolios/:portfolioId/skills', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '')
+    const supabaseClient = getSupabaseClient(req)
+    const { data: { user } } = await supabaseClient.auth.getUser(token)
+
+    if (!user) throw new Error('Unauthorized')
+
+    const { portfolioId } = req.params
+
+    const { error } = await supabaseClient
+      .from('skills')
+      .delete()
+      .eq('portfolio_id', portfolioId)
+
+    if (error) throw error
+
+    res.json({ error: null })
+  } catch (error) {
+    res.status(400).json({ error: error.message })
+  }
+})

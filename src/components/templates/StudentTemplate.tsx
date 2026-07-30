@@ -1,123 +1,142 @@
 import { PersonalInfo, Skill, Project } from '../../types/portfolio'
-import { Github, Linkedin, Mail, MapPin, ExternalLink, GraduationCap } from 'lucide-react'
+import { Github, Linkedin, Mail, MapPin, ExternalLink, GraduationCap, Briefcase } from 'lucide-react'
 
 interface StudentTemplateProps {
   personalInfo: PersonalInfo
   skills: Skill[]
   projects: Project[]
+  customStyles?: any
 }
 
-export default function StudentTemplate({ personalInfo, skills, projects }: StudentTemplateProps) {
+export default function StudentTemplate({ personalInfo, skills, projects, customStyles }: StudentTemplateProps) {
+  const fontClass = customStyles?.font || 'Inter, sans-serif'
+
   return (
-    <div className="min-h-screen bg-white">
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
-        {/* Header */}
-        <header className="text-center mb-16 border-b pb-12">
-          {personalInfo.avatar && (
-            <img
-              src={personalInfo.avatar}
-              alt={personalInfo.fullName}
-              className="w-28 h-28 rounded-full mx-auto mb-6 border-4 border-blue-500"
-            />
-          )}
-          <h1 className="text-4xl font-bold mb-2 text-gray-900">{personalInfo.fullName}</h1>
-          <p className="text-xl text-blue-600 mb-4">{personalInfo.title}</p>
-          <p className="text-gray-600 max-w-2xl mx-auto mb-6 leading-relaxed">{personalInfo.bio}</p>
-          <div className="flex justify-center gap-4">
-            {personalInfo.github && (
-              <a
-                href={personalInfo.github}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Github className="h-5 w-5" />
-                GitHub
-              </a>
-            )}
-            {personalInfo.linkedin && (
-              <a
-                href={personalInfo.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Linkedin className="h-5 w-5" />
-                LinkedIn
-              </a>
-            )}
-            {personalInfo.email && (
-              <a
-                href={`mailto:${personalInfo.email}`}
-                className="inline-flex items-center gap-2 px-4 py-2 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 transition-colors"
-              >
-                <Mail className="h-5 w-5" />
-                Contact
-              </a>
-            )}
+    <div 
+      className="min-h-screen bg-white text-neutral-900 border border-neutral-200 rounded-2xl font-sans overflow-hidden select-text"
+      style={{ fontFamily: fontClass }}
+    >
+      <div className="max-w-4xl mx-auto px-6 py-16 md:py-24">
+        
+        {/* Recruiter-Friendly Header */}
+        <header className="mb-16 border-b border-neutral-100 pb-12">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <div className="flex items-center gap-5 select-none">
+              {personalInfo.avatar && (
+                <img
+                  src={personalInfo.avatar}
+                  alt={personalInfo.fullName}
+                  className="w-20 h-20 rounded-full border object-cover shadow-sm"
+                />
+              )}
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-neutral-900">{personalInfo.fullName}</h1>
+                <p className="text-sm text-neutral-500 font-medium mt-0.5">{personalInfo.title}</p>
+              </div>
+            </div>
+            
+            {/* Contact details card box */}
+            <div className="bg-neutral-50 border p-4 rounded-xl text-xs space-y-2.5 min-w-[240px]">
+              <h4 className="font-bold text-neutral-400 uppercase tracking-widest text-[9px] mb-1.5 select-none">Contact Details</h4>
+              {personalInfo.email && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-3.5 w-3.5 text-neutral-400" />
+                  <a href={`mailto:${personalInfo.email}`} className="text-neutral-600 hover:text-neutral-900 font-medium hover:underline">
+                    {personalInfo.email}
+                  </a>
+                </div>
+              )}
+              {personalInfo.location && (
+                <div className="flex items-center gap-2 text-neutral-600">
+                  <MapPin className="h-3.5 w-3.5 text-neutral-400" />
+                  <span className="font-medium">{personalInfo.location}</span>
+                </div>
+              )}
+              <div className="flex gap-4 pt-1 select-none">
+                {personalInfo.github && (
+                  <a href={personalInfo.github} target="_blank" rel="noopener noreferrer" className="text-neutral-500 hover:text-neutral-900 flex items-center gap-1 font-semibold hover:underline">
+                    <Github className="h-3.5 w-3.5" />
+                    GitHub
+                  </a>
+                )}
+                {personalInfo.linkedin && (
+                  <a href={personalInfo.linkedin} target="_blank" rel="noopener noreferrer" className="text-neutral-500 hover:text-neutral-900 flex items-center gap-1 font-semibold hover:underline">
+                    <Linkedin className="h-3.5 w-3.5" />
+                    LinkedIn
+                  </a>
+                )}
+              </div>
+            </div>
           </div>
-          {personalInfo.location && (
-            <p className="text-gray-500 mt-4 flex items-center justify-center gap-2">
-              <MapPin className="h-4 w-4" />
-              {personalInfo.location}
-            </p>
-          )}
+          
+          <p className="text-sm text-neutral-600 leading-relaxed max-w-2xl font-light">
+            {personalInfo.bio}
+          </p>
         </header>
 
-        {/* Skills */}
+        {/* Skills Grouped Category Grid */}
         <section className="mb-16">
-          <h2 className="text-2xl font-bold mb-6 flex items-center gap-2 text-gray-900">
-            <GraduationCap className="h-6 w-6 text-blue-600" />
-            Skills & Technologies
+          <h2 className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8 flex items-center gap-2 select-none">
+            <GraduationCap className="h-4 w-4 text-neutral-400" />
+            Core Competencies
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-2 gap-4">
             {skills.map((skill) => (
-              <div key={skill.id} className="p-4 bg-blue-50 rounded-lg border-2 border-blue-100">
-                <h3 className="font-semibold text-blue-900 mb-1">{skill.name}</h3>
-                <p className="text-sm text-blue-700">{skill.level}</p>
-                <p className="text-xs text-blue-600 mt-1">{skill.category}</p>
+              <div key={skill.id} className="p-4 bg-neutral-50 border rounded-xl hover:bg-neutral-100/40 transition-colors">
+                <div className="flex justify-between items-center mb-1">
+                  <h3 className="text-xs font-semibold text-neutral-900">{skill.name}</h3>
+                  <span className="text-[9px] bg-neutral-200 text-neutral-700 font-bold px-1.5 py-0.5 rounded">
+                    {skill.level}
+                  </span>
+                </div>
+                <p className="text-[10px] text-neutral-500 font-medium uppercase tracking-wider mt-0.5">{skill.category}</p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Projects */}
+        {/* Academic & Personal Projects */}
         <section className="mb-16">
-          <h2 className="text-2xl font-bold mb-6 text-gray-900">Academic & Personal Projects</h2>
-          <div className="space-y-6">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-neutral-400 mb-8 flex items-center gap-2 select-none">
+            <Briefcase className="h-4 w-4 text-neutral-400" />
+            Projects Showcase
+          </h2>
+          <div className="space-y-4">
             {projects.map((project) => (
               <div
                 key={project.id}
-                className="p-6 bg-gray-50 rounded-lg border-l-4 border-blue-500 hover:shadow-md transition-shadow"
+                className="p-5 border rounded-xl bg-white hover:shadow-sm hover:border-neutral-300 transition-all"
               >
-                <div className="flex justify-between items-start mb-3">
-                  <h3 className="text-xl font-semibold text-gray-900">{project.title}</h3>
+                <div className="flex justify-between items-start mb-2 gap-4">
+                  <h3 className="text-sm font-bold text-neutral-900">{project.title}</h3>
                   {project.startDate && (
-                    <span className="text-sm text-gray-500">
-                      {new Date(project.startDate).toLocaleDateString()}
+                    <span className="text-[10px] text-neutral-400 font-medium shrink-0 select-none">
+                      {new Date(project.startDate).toLocaleDateString(undefined, { year: 'numeric', month: 'short' })}
                     </span>
                   )}
                 </div>
-                <p className="text-gray-600 mb-4">{project.description}</p>
-                <div className="flex flex-wrap gap-2 mb-4">
+                <p className="text-xs text-neutral-600 leading-relaxed mb-4">{project.description}</p>
+                
+                <div className="flex flex-wrap gap-1.5 mb-4">
                   {project.technologies.map((tech) => (
                     <span
                       key={tech}
-                      className="px-3 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium"
+                      className="px-2 py-0.5 bg-neutral-100 text-neutral-700 border rounded text-[9px] font-medium"
                     >
                       {tech}
                     </span>
                   ))}
                 </div>
-                <div className="flex gap-4">
+
+                <div className="flex gap-4 border-t pt-3 select-none text-[11px] text-neutral-500 font-semibold">
                   {project.githubUrl && (
                     <a
                       href={project.githubUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center gap-1"
+                      className="hover:text-neutral-900 flex items-center gap-1 transition-colors"
                     >
-                      <Github className="h-4 w-4" />
+                      <Github className="h-3.5 w-3.5" />
                       Source Code
                     </a>
                   )}
@@ -126,9 +145,9 @@ export default function StudentTemplate({ personalInfo, skills, projects }: Stud
                       href={project.liveUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 font-medium text-sm flex items-center gap-1"
+                      className="hover:text-neutral-900 flex items-center gap-1 transition-colors"
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="h-3.5 w-3.5" />
                       Live Demo
                     </a>
                   )}
@@ -137,11 +156,7 @@ export default function StudentTemplate({ personalInfo, skills, projects }: Stud
             ))}
           </div>
         </section>
-
-        {/* Footer */}
-        <footer className="text-center text-gray-500 text-sm py-8 border-t">
-          <p>© {new Date().getFullYear()} {personalInfo.fullName}. All rights reserved.</p>
-        </footer>
+        
       </div>
     </div>
   )

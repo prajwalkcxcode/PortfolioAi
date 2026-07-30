@@ -74,7 +74,7 @@ function App() {
             }
           />
           <Route
-            path="/create"
+            path="/create/:id?"
             element={
               <ProtectedRoute>
                 <Layout>
@@ -86,11 +86,9 @@ function App() {
           <Route
             path="/preview/:id"
             element={
-              <ProtectedRoute>
-                <Layout>
-                  <PreviewPortfolio />
-                </Layout>
-              </ProtectedRoute>
+              <Layout>
+                <PreviewPortfolio />
+              </Layout>
             }
           />
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Sparkles, Mail, Lock, User, ArrowRight } from 'lucide-react'
+import { Sparkles, Mail, Lock, User } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Register() {
